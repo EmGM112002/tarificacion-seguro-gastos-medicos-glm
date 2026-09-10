@@ -1,230 +1,261 @@
-# Portafolio Actuarial — Proyecto 03
-## Modelo GLM para Tarifación de Seguros de Gastos Médicos
+# Tarificación de Seguro de Gastos Médicos mediante GLM Tweedie
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
-![statsmodels](https://img.shields.io/badge/statsmodels-2E6DB4?style=flat)
+![pandas](https://img.shields.io/badge/pandas-150458?style=flat&logo=pandas&logoColor=white)
+![statsmodels](https://img.shields.io/badge/statsmodels-4051B5?style=flat)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat&logo=scikitlearn&logoColor=white)
-![LaTeX](https://img.shields.io/badge/LaTeX-008080?style=flat&logo=latex&logoColor=white)
-![Área](https://img.shields.io/badge/Área-Pricing%20No--Vida-1B3A6B?style=flat)
-![Ramo](https://img.shields.io/badge/Ramo-Gastos%20Médicos-2E6DB4?style=flat)
+![Área](https://img.shields.io/badge/Área-Tarificación%20Actuarial-1B3A6B?style=flat)
+
+Proyecto actuarial desarrollado en **Python** para estimar el costo esperado de una póliza de gastos médicos mediante un **Modelo Lineal Generalizado (GLM) Tweedie con enlace logarítmico**.
+
+El modelo permite estimar una prima pura individual a partir de características del asegurado y del contrato, y convertir los coeficientes estimados en relatividades de riesgo interpretables.
+
+El desarrollo matemático completo del GLM y de la distribución Tweedie se encuentra en el documento teórico incluido en el repositorio.
 
 ---
 
-## ¿De qué trata este proyecto?
+## 1. Problema actuarial
 
-Pipeline completo de tarifación actuarial que estima la **prima pura** de
-cada asegurado usando un **GLM Tweedie con liga logarítmica**, produciendo
-relatividades de riesgo interpretables para el equipo de pricing.
+En seguros de salud, el costo de siniestros presenta características que dificultan el uso de modelos lineales convencionales:
 
-El modelo es multiplicativo: la prima de cada perfil es el producto de una
-prima base por factores (relatividades) que ajustan según edad, IMC, condición
-de fumador, deducible, región, sexo y tipo de plan.
+- una proporción importante de asegurados no presenta siniestros durante el periodo;
+- cuando existe un siniestro, el costo es positivo y continuo;
+- la distribución presenta asimetría;
+- y la varianza aumenta con el nivel esperado del costo.
 
-$$\mu_i = e_i \cdot \underbrace{e^{\beta_0}}_{\text{prima base}} \cdot \underbrace{e^{\beta_{\text{edad}}}}_{\text{factor edad}} \cdot \underbrace{e^{\beta_{\text{fumador}}}}_{\text{factor fumador}} \cdots$$
+El problema consiste en estimar el **costo esperado por asegurado** y cuantificar cómo diferentes características modifican el nivel de riesgo.
 
-| Característica | Detalle |
+El objetivo del proyecto es construir un modelo de tarificación capaz de:
+
+- incorporar múltiples factores de riesgo;
+- ajustar por exposición;
+- obtener relatividades multiplicativas;
+- generar predicciones individuales;
+- evaluar estabilidad fuera de la muestra de entrenamiento;
+- y transformar los resultados del modelo en una estructura tarifaria demostrativa.
+
+---
+
+## 2. Metodología
+
+Se implementa un **GLM Tweedie** con enlace logarítmico.
+
+El flujo de modelación es:
+
+1. Cargar y explorar la base de pólizas.
+2. Analizar la distribución del costo de siniestros.
+3. Preparar y transformar las variables explicativas.
+4. Construir categorías actuariales para variables como edad e IMC.
+5. Definir las categorías de referencia.
+6. Ajustar un GLM Tweedie.
+7. Incorporar la exposición mediante un `offset` logarítmico.
+8. Transformar los coeficientes del modelo en relatividades de riesgo.
+9. Calcular intervalos de confianza.
+10. Evaluar el modelo mediante validación cruzada.
+11. Comparar resultados observados y predichos.
+12. Construir una tabla tarifaria demostrativa.
+
+### Especificación principal
+
+| Elemento | Configuración |
 |---|---|
-| Distribución | Tweedie ($p = 1.5$, compuesta Poisson-Gamma) |
-| Liga | Logarítmica (modelo multiplicativo) |
-| Offset | $\ln(\text{exposición})$ para normalizar por vigencia |
-| Validación | 5-fold cross-validation con devianza Tweedie |
-| Dataset | 10,000 pólizas sintéticas, 85.1% sin siniestros |
+| Familia | Tweedie |
+| Parámetro de potencia | `p = 1.5` |
+| Función de enlace | Logarítmica |
+| Ajuste por exposición | `log(exposure)` como offset |
+| Validación | 5-fold cross-validation |
+| Métrica principal | Tweedie Deviance |
+
+El parámetro `p = 1.5` se mantiene fijo dentro de esta implementación y debe interpretarse como una decisión de modelación del proyecto, no como una estimación óptima universal para cualquier cartera.
+
+### Factores considerados
+
+El modelo incorpora variables relacionadas con:
+
+- edad;
+- índice de masa corporal;
+- condición de fumador;
+- deducible;
+- región;
+- sexo;
+- plan;
+- y exposición.
 
 ---
 
-## Estructura del repositorio
+## 3. Datos utilizados
 
-```
-03-Python-GLM/
-│
-├── gastos_medicos.csv                              # 10,000 pólizas sintéticas
-├── Proyecto03_GLM_Gastos_Medicos.ipynb             # Notebook ejecutable
-├── Proyecto03_Python_GLM_Gastos_Medicos.pdf        # Documento teórico
-└── README.md
-```
+El proyecto utiliza `gastos medicos.csv`, una base sintética de aproximadamente **10,000 pólizas** construida para representar características habituales de una cartera de gastos médicos.
 
----
+La variable objetivo presenta una proporción considerable de observaciones con costo igual a cero, aproximadamente **85.1%** de la muestra.
 
-## Secciones del notebook
+Esto permite trabajar con una estructura de datos compatible con el objetivo demostrativo del modelo Tweedie: combinar una masa en cero con costos positivos continuos.
 
-El notebook está organizado en 9 secciones que siguen el flujo natural de un
-proyecto de pricing:
-
-| # | Sección | Contenido |
-|---|---|---|
-| 1 | Carga y exploración inicial | Lectura del CSV, tipos de datos, estadística descriptiva |
-| 2 | Análisis Exploratorio (EDA) | Distribución de prima pura, boxplots por categoría, relación edad–costo con justificación de liga log |
-| 3 | Feature Engineering | Grupos quinquenales de edad, categorías OMS de IMC, codificación de fumador |
-| 4 | Ajuste del GLM Tweedie | Configuración de familia Tweedie, liga log, Treatment() con categorías de referencia, offset de exposición |
-| 5 | Tabla de Relatividades | Extracción de coeficientes, cálculo de relatividades con IC al 95%, gráfico de factores significativos |
-| 6 | Validación Cruzada | Pipeline para prevenir data leakage, scorer personalizado con devianza Tweedie, 5-fold CV |
-| 7 | Predicciones y residuos | Predicción sobre test set, análisis de residuos |
-| 8 | Tabla de tarifas | Prima base por perfil combinando relatividades |
-| 9 | Conclusiones | Hallazgos principales, limitaciones y extensiones |
+Las variables son utilizadas exclusivamente con fines académicos y de portafolio y no corresponden a información personal real de asegurados.
 
 ---
 
-## Conceptos clave implementados
+## 4. Herramientas
 
-### Distribución Tweedie ($p = 1.5$)
-
-$$Y = \sum_{j=1}^{N} X_j \quad \text{donde} \quad N \sim \text{Poisson}(\lambda), \quad X_j \sim \text{Gamma}(\alpha, \beta)$$
-
-Modela la prima pura sin separar frecuencia y severidad. El parámetro
-$p = 1.5$ se elige como punto medio del rango actuarial $(1, 2)$ y es
-consistente con la literatura empírica para seguros de gastos médicos
-(Ohlsson & Johansson, 2010).
-
-### Liga logarítmica y modelo multiplicativo
-
-La liga log garantiza primas positivas y convierte el modelo aditivo en
-multiplicativo: cada factor **multiplica** la prima base en lugar de sumarle
-una cantidad fija.
-
-$$\mu_i = e^{\beta_0} \cdot e^{\beta_1 x_{1i}} \cdot e^{\beta_2 x_{2i}} \cdots$$
-
-### Codificación categórica con Treatment()
-
-Cada variable categórica se codifica con $k-1$ dummies usando `Treatment()`
-de Patsy para elegir explícitamente la categoría de referencia con sentido
-actuarial:
-
-| Variable | Referencia | Justificación |
-|---|---|---|
-| `grupo_imc` | Normal | IMC saludable como punto de comparación natural |
-| `fumador` | No | Perfil de menor riesgo base |
-| `deducible` | Medio | Nivel intermedio como punto neutro |
-| `grupo_edad` | 36-45 | Edad media de la cartera |
-| `region` | Centro | Región de riesgo promedio |
-| `sexo` | F | Convención |
-
-### Offset de exposición
-
-El offset $\ln(e_i)$ normaliza por la vigencia de cada póliza, convirtiendo
-el modelo en un análisis de riesgo por unidad de tiempo (prima pura anualizada):
-
-$$\ln(\mu_i) = \ln(e_i) + \beta_0 + \sum_k \beta_k x_{ki}$$
-
-### Intervalo de confianza de las relatividades
-
-Cada relatividad se acompaña de su IC al 95% transformado con exponencial.
-Si el intervalo contiene el 1, el factor no es estadísticamente significativo
-y no debería incorporarse a la tarifa.
-
-### Validación cruzada con Pipeline
-
-El Pipeline encadena preprocesamiento + modelo para prevenir data leakage
-durante la validación cruzada. El scorer personalizado usa `make_scorer`
-con `mean_tweedie_deviance(power=1.5)` y `greater_is_better=False`.
-
----
-
-## Relatividades principales
-
-| Factor | β̂ | Relatividad | IC 95% | Interpretación |
-|---|---|---|---|---|
-| Obesidad (vs Normal) | 0.734 | 2.084 | [1.70, 2.56] | +108% por enfermedades crónicas |
-| 65+ (vs 36-45) | 0.681 | 1.976 | [1.54, 2.54] | Efecto acelerado de la edad |
-| Sobrepeso (vs Normal) | 0.484 | 1.622 | [1.32, 2.00] | +62% por riesgo incrementado |
-| 56-65 (vs 36-45) | 0.450 | 1.568 | [1.22, 2.02] | Morbilidad creciente |
-| Fumador (Sí vs No) | 0.355 | 1.427 | [1.20, 1.70] | +43% sobre la prima base |
-| CDMX (vs Centro) | 0.330 | 1.391 | [1.11, 1.75] | Mayor costo hospitalario |
-| Deducible Bajo (vs Medio) | 0.304 | 1.355 | [1.13, 1.62] | Riesgo moral inverso |
-| Masculino (vs Femenino) | 0.233 | 1.262 | [1.08, 1.47] | Diferencial por género |
-| Deducible Alto (vs Medio) | −0.236 | 0.790 | [0.65, 0.95] | −21% efecto protector |
-| 18-25 (vs 36-45) | −0.599 | 0.550 | [0.41, 0.75] | Grupo más joven y sano |
-
-### Validación cruzada (5-fold)
-
-| Métrica | Valor |
+| Herramienta | Aplicación |
 |---|---|
-| Devianza media | 191.26 |
-| Desviación estándar | 6.90 |
+| **Python** | Desarrollo completo del proceso de modelación |
+| **pandas** | Preparación y transformación de datos |
+| **NumPy** | Cálculos numéricos |
+| **statsmodels** | Estimación e interpretación del GLM |
+| **scikit-learn** | Validación cruzada y evaluación predictiva |
+| **Matplotlib / Seaborn** | Exploración y visualización de resultados |
+| **Jupyter Notebook** | Desarrollo reproducible del análisis |
+
+---
+
+## 5. Resultados
+
+El modelo permite transformar los coeficientes del GLM en relatividades de riesgo respecto de categorías de referencia.
+
+### Principales relatividades estimadas
+
+| Factor | Relatividad aproximada |
+|---|---:|
+| Obesidad vs. IMC normal | 2.084 |
+| Edad 65+ vs. 36–45 | 1.976 |
+| Sobrepeso vs. IMC normal | 1.622 |
+| Edad 56–65 vs. 36–45 | 1.568 |
+| Fumador vs. no fumador | 1.427 |
+| CDMX vs. Centro | 1.391 |
+| Deducible bajo vs. medio | 1.355 |
+| Masculino vs. femenino | 1.262 |
+| Deducible alto vs. medio | 0.790 |
+| Edad 18–25 vs. 36–45 | 0.550 |
+
+Las relatividades permiten interpretar los efectos del modelo de forma multiplicativa manteniendo constantes los demás factores incluidos.
+
+### Validación
+
+La validación cruzada de cinco particiones produce:
+
+| Métrica | Resultado |
+|---|---:|
+| Tweedie Deviance media | 191.26 |
+| Desviación estándar entre folds | 6.90 |
 | Coeficiente de variación | 3.61% |
-| Devianza en test set | 182.33 |
-| Prima real media (test) | $1,463 |
-| Prima predicha media (test) | $1,592 |
+| Tweedie Deviance en prueba | 182.33 |
+| Costo medio observado en prueba | $1,463 |
+| Costo medio predicho en prueba | $1,592 |
 
-### Tabla de primas (perfil base, exposición 1 año)
+La dispersión relativamente baja de la métrica entre los folds muestra que el desempeño obtenido es razonablemente estable entre las particiones utilizadas.
 
-Prima base (categoría de referencia): **$681**
+Esto no constituye, por sí mismo, evidencia suficiente para descartar sobreajuste o garantizar desempeño en una cartera distinta.
 
-| Grupo edad | No fumador | Fumador |
-|---|---|---|
-| 18-25 | $472 | $674 |
-| 26-35 | $612 | $873 |
-| 36-45 | $859 | $1,226 |
-| 46-55 | $1,055 | $1,505 |
-| 56-65 | $1,348 | $1,922 |
+### Ejemplo de estructura tarifaria
+
+Partiendo de una prima base aproximada de **$681**, el proyecto genera combinaciones ilustrativas por grupo de edad y condición de fumador.
+
+| Edad | No fumador | Fumador |
+|---|---:|---:|
+| 18–25 | $472 | $674 |
+| 26–35 | $612 | $873 |
+| 36–45 | $859 | $1,226 |
+| 46–55 | $1,055 | $1,505 |
+| 56–65 | $1,348 | $1,922 |
 | 65+ | $1,698 | $2,422 |
 
+Esta tabla demuestra cómo las relatividades estimadas pueden convertirse en factores para una estructura tarifaria. No representa una tarifa comercial lista para implementación.
+
 ---
 
-## Cómo reproducir
+## 6. Aprendizajes y limitaciones
 
-**Requisitos:** Python 3.8+ con `pandas`, `numpy`, `matplotlib`, `seaborn`,
-`statsmodels`, `scikit-learn`, `scipy`.
+### Aprendizajes
 
-```bash
-pip install pandas numpy matplotlib seaborn statsmodels scikit-learn scipy
+El proyecto permite demostrar:
+
+- preparación de datos para tarificación actuarial;
+- construcción e interpretación de un GLM;
+- utilización de la familia Tweedie;
+- ajuste por exposición mediante offset;
+- creación de variables categóricas;
+- selección de categorías de referencia;
+- transformación de coeficientes en relatividades;
+- interpretación de intervalos de confianza;
+- validación cruzada;
+- evaluación de desempeño fuera de muestra;
+- y conversión de resultados estadísticos en una estructura tarifaria interpretable.
+
+### Limitaciones
+
+Entre las principales limitaciones del proyecto se encuentran:
+
+- utiliza información sintética;
+- el parámetro Tweedie `p = 1.5` se fija previamente y no se estima mediante un procedimiento específico de optimización;
+- la selección de variables y categorías responde al diseño del proyecto;
+- no se modelan frecuencia y severidad por separado;
+- no se incorpora selección de variables mediante un proceso actuarial completo;
+- no se analizan interacciones de manera exhaustiva;
+- la validación se realiza sobre la misma población generadora del dataset sintético;
+- no se incorporan tendencias de inflación médica;
+- no se incorporan gastos, comisiones, margen de utilidad, costo de capital ni reaseguro;
+- y el resultado no constituye una tarifa comercial ni regulatoria.
+
+Para utilizar un modelo similar en producción sería necesario complementar el análisis con criterios actuariales, de negocio, regulatorios, de gobernanza y validación independiente.
+
+---
+
+## 7. Contenido del repositorio
+
+```text
+tarificacion-seguro-gastos-medicos-glm/
+├── Proyecto03_GLM_Gastos_Medicos.ipynb   # Desarrollo y estimación del GLM
+├── Proyecto_3_teoria.pdf                  # Documentación matemática y actuarial
+├── gastos medicos.csv                     # Dataset utilizado
+├── LICENSE
+└── README.md                              # Descripción ejecutiva del proyecto
 ```
 
-1. Abrir `Proyecto03_GLM_Gastos_Medicos.ipynb` en Jupyter, Colab o VS Code.
-2. Asegurarse de que `gastos_medicos.csv` esté accesible (ajustar la ruta de carga si es necesario).
-3. Ejecutar todas las celdas en orden secuencial.
+---
 
-> **Nota:** el notebook fue desarrollado en Google Colab. Si se ejecuta
-> localmente, modificar la celda de carga para apuntar al CSV local en lugar
-> de Google Drive.
+## 8. Documentación técnica
+
+El desarrollo matemático y conceptual del modelo se encuentra en:
+
+**[`Proyecto_3_teoria.pdf`](./Proyecto_3_teoria.pdf)**
+
+El notebook:
+
+**[`Proyecto03_GLM_Gastos_Medicos.ipynb`](./Proyecto03_GLM_Gastos_Medicos.ipynb)**
+
+contiene la implementación completa, la construcción de variables, el ajuste del GLM, la validación y el análisis de resultados.
 
 ---
 
-## Herramientas utilizadas
+## 9. Cómo ejecutar el proyecto
 
-| Librería | Uso |
-|---|---|
-| `pandas` | Manipulación del dataset |
-| `matplotlib` / `seaborn` | Visualización (EDA, relatividades, residuos) |
-| `statsmodels` | Ajuste del GLM Tweedie y tabla de coeficientes |
-| `scikit-learn` | Pipeline, OneHotEncoder, TweedieRegressor, cross-validation |
-| `scipy` | Pruebas estadísticas |
+### Requisitos
 
----
+- Python 3;
+- Jupyter Notebook, JupyterLab, VS Code o un entorno compatible con `.ipynb`.
 
-## Conclusiones
+### Dependencias
 
-1. **El GLM Tweedie con liga log** es apropiado para este dataset: la masa
-   en cero (85.1%) y la asimetría positiva de la prima pura son consistentes
-   con una distribución compuesta Poisson-Gamma.
+```bash
+pip install pandas numpy statsmodels scikit-learn matplotlib seaborn
+```
 
-2. **Los factores más importantes** por magnitud de relatividad son el grupo
-   de edad (efecto creciente acelerado, hasta 1.98× en 65+), el grupo de IMC
-   con obesidad (2.08×), la condición de fumador (1.43×) y el tipo de
-   deducible (efecto protector del alto: 0.79×).
+### Ejecución
 
-3. **La validación cruzada 5-fold** muestra baja variabilidad entre folds,
-   indicando que el modelo es estable y no presenta sobreajuste significativo.
-
-4. **La tabla de tarifas** generada es directamente utilizable por el equipo
-   comercial para cotizar nuevos asegurados.
-
-### Limitaciones y extensiones
-
-- El parámetro `power` de la Tweedie se fijó en 1.5; en producción se estima
-  mediante máxima verosimilitud perfilada (búsqueda en rejilla de devianza).
-- Se pueden explorar interacciones (fumador × edad, IMC × edad) y efectos no
-  lineales con splines.
-- Un modelo de dos partes (frecuencia + severidad por separado) puede mejorar
-  la interpretabilidad cuando ambos componentes tienen drivers distintos.
+1. Clonar o descargar el repositorio.
+2. Mantener `gastos medicos.csv` en el mismo directorio que el notebook.
+3. Abrir `Proyecto03_GLM_Gastos_Medicos.ipynb`.
+4. Ejecutar las celdas secuencialmente.
+5. Revisar el análisis exploratorio.
+6. Revisar los coeficientes y relatividades obtenidas.
+7. Analizar los resultados de validación cruzada.
+8. Revisar las predicciones y la estructura tarifaria generada.
 
 ---
 
-## Referencias
+## Autor
 
-- Ohlsson, E., & Johansson, B. (2010). *Non-Life Insurance Pricing with Generalized Linear Models*. Springer.
-- Nelder, J. A., & Wedderburn, R. W. M. (1972). *Generalized Linear Models*. Journal of the Royal Statistical Society.
-- McCullagh, P., & Nelder, J. A. (1989). *Generalized Linear Models* (2nd ed.). Chapman & Hall.
-- James, G., et al. (2021). *An Introduction to Statistical Learning* (2nd ed.). Springer.
-- Pedregosa, F., et al. (2011). *Scikit-learn: Machine Learning in Python*. JMLR.
-
----
+**Emiliano Guillén Medina**  
+Licenciatura en Actuaría  
+[GitHub](https://github.com/EmGM112002) · [LinkedIn](https://www.linkedin.com/in/emgm11)
